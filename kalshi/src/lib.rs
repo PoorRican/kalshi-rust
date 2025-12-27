@@ -117,12 +117,14 @@
 
 #[macro_use]
 mod utils;
+mod api_key_auth;
 mod auth;
 mod exchange;
 mod kalshi_error;
 mod market;
 mod portfolio;
 
+pub use api_key_auth::*;
 pub use auth::*;
 pub use exchange::*;
 pub use kalshi_error::*;
@@ -136,7 +138,20 @@ use reqwest;
 /// between the user and the market, abstracting away the meat of requests
 /// by encapsulating authentication information and the client itself.
 ///
-/// ## Creating a new `Kalshi` instance for demo mode:
+/// ## Creating a new `Kalshi` instance with API key authentication (recommended):
+///
+/// ```
+/// use kalshi::Kalshi;
+/// use kalshi::TradingEnvironment;
+///
+/// let kalshi_instance = Kalshi::new_with_api_key(
+///     TradingEnvironment::DemoMode,
+///     "your-api-key-id",
+///     "/path/to/private_key.pem"  // or raw PEM content
+/// ).unwrap();
+/// ```
+///
+/// ## Creating a new `Kalshi` instance for demo mode (legacy, requires login):
 ///
 /// ```
 /// use kalshi::Kalshi;
@@ -150,10 +165,12 @@ use reqwest;
 pub struct Kalshi {
     /// - `base_url`: The base URL for the API, determined by the trading environment.
     base_url: String,
-    /// - `curr_token`: A field for storing the current authentication token.
+    /// - `curr_token`: A field for storing the current authentication token (legacy auth).
     curr_token: Option<String>,
-    /// - `member_id`: A field for storing the member ID.
+    /// - `member_id`: A field for storing the member ID (legacy auth).
     member_id: Option<String>,
+    /// - `credentials`: API key credentials for RSA signature authentication.
+    credentials: Option<KalshiCredentials>,
     /// - `client`: The HTTP client used for making requests to the marketplace.
     client: reqwest::Client,
 }
@@ -181,12 +198,139 @@ impl Kalshi {
     /// ```
     ///
     pub fn new(trading_env: TradingEnvironment) -> Kalshi {
-        return Kalshi {
+        Kalshi {
             base_url: utils::build_base_url(trading_env).to_string(),
             curr_token: None,
             member_id: None,
+            credentials: None,
             client: reqwest::Client::new(),
-        };
+        }
+    }
+
+    /// Creates a new instance of Kalshi with API key authentication (recommended).
+    ///
+    /// # Arguments
+    ///
+    /// * `trading_env` - The trading environment (LiveMarketMode or DemoMode).
+    /// * `key_id` - Your Kalshi API key ID.
+    /// * `pem_path_or_content` - Either a file path to the PEM private key file,
+    ///   or the raw PEM content string.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use kalshi::{Kalshi, TradingEnvironment};
+    ///
+    /// // Using a file path
+    /// let kalshi = Kalshi::new_with_api_key(
+    ///     TradingEnvironment::DemoMode,
+    ///     "your-api-key-id",
+    ///     "/path/to/private_key.pem"
+    /// ).unwrap();
+    ///
+    /// // Using raw PEM content
+    /// let pem = "-----BEGIN PRIVATE KEY-----\n...";
+    /// let kalshi = Kalshi::new_with_api_key(
+    ///     TradingEnvironment::DemoMode,
+    ///     "your-api-key-id",
+    ///     pem
+    /// ).unwrap();
+    /// ```
+    pub fn new_with_api_key(
+        trading_env: TradingEnvironment,
+        key_id: &str,
+        pem_path_or_content: &str,
+    ) -> Result<Kalshi, KalshiError> {
+        let credentials = KalshiCredentials::new(key_id, pem_path_or_content)?;
+        Ok(Kalshi {
+            base_url: utils::build_base_url(trading_env).to_string(),
+            curr_token: None,
+            member_id: None,
+            credentials: Some(credentials),
+            client: reqwest::Client::new(),
+        })
+    }
+
+    /// Creates a new instance of Kalshi with API key authentication from environment variables.
+    ///
+    /// # Arguments
+    ///
+    /// * `trading_env` - The trading environment (LiveMarketMode or DemoMode).
+    /// * `key_id_env_var` - Name of the environment variable containing the API key ID.
+    /// * `pem_env_var` - Name of the environment variable containing either the PEM file path
+    ///   or the raw PEM content.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use kalshi::{Kalshi, TradingEnvironment};
+    ///
+    /// // Set env vars: KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY
+    /// let kalshi = Kalshi::new_with_api_key_from_env(
+    ///     TradingEnvironment::DemoMode,
+    ///     "KALSHI_API_KEY_ID",
+    ///     "KALSHI_PRIVATE_KEY"
+    /// ).unwrap();
+    /// ```
+    pub fn new_with_api_key_from_env(
+        trading_env: TradingEnvironment,
+        key_id_env_var: &str,
+        pem_env_var: &str,
+    ) -> Result<Kalshi, KalshiError> {
+        let credentials = KalshiCredentials::from_env(key_id_env_var, pem_env_var)?;
+        Ok(Kalshi {
+            base_url: utils::build_base_url(trading_env).to_string(),
+            curr_token: None,
+            member_id: None,
+            credentials: Some(credentials),
+            client: reqwest::Client::new(),
+        })
+    }
+
+    /// Checks if the client is authenticated (either via API key or legacy token).
+    pub fn is_authenticated(&self) -> bool {
+        self.credentials.is_some() || self.curr_token.is_some()
+    }
+
+    /// Returns true if using API key authentication.
+    pub fn uses_api_key_auth(&self) -> bool {
+        self.credentials.is_some()
+    }
+
+    /// Internal helper to add authentication headers to a request builder.
+    /// Supports both API key auth (preferred) and legacy Bearer token auth.
+    pub(crate) fn add_auth_headers(
+        &self,
+        builder: reqwest::RequestBuilder,
+        method: &str,
+        url: &reqwest::Url,
+    ) -> Result<reqwest::RequestBuilder, KalshiError> {
+        if let Some(ref credentials) = self.credentials {
+            let path = extract_path_for_signing(url);
+            let (key_id, timestamp, signature) =
+                credentials.generate_auth_headers(method, &path)?;
+
+            Ok(builder
+                .header("KALSHI-ACCESS-KEY", key_id)
+                .header("KALSHI-ACCESS-TIMESTAMP", timestamp)
+                .header("KALSHI-ACCESS-SIGNATURE", signature))
+        } else if let Some(ref token) = self.curr_token {
+            Ok(builder.header("Authorization", token.clone()))
+        } else {
+            Err(KalshiError::UserInputError(
+                "Not authenticated. Use new_with_api_key() or login() first.".to_string(),
+            ))
+        }
+    }
+
+    /// Checks that the client is authenticated and returns an error if not.
+    pub(crate) fn require_auth(&self) -> Result<(), KalshiError> {
+        if !self.is_authenticated() {
+            return Err(KalshiError::UserInputError(
+                "Not authenticated. Use new_with_api_key() or login() first.".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     /// Retrieves the current user authentication token, if available.
