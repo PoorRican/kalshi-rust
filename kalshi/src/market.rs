@@ -943,6 +943,7 @@ pub enum MarketStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn sample_market_json() -> &'static str {
         r#"{
@@ -1186,11 +1187,11 @@ mod tests {
                 None,
             )
             .await
-            .expect("Failed to fetch markets from demo API");
+            .expect("Failed to fetch markets from API");
 
         let market = markets
             .first()
-            .expect("No open markets available on demo API");
+            .expect("No open markets available");
 
         // Get the series ticker from the event
         let event = kalshi
@@ -1206,7 +1207,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires network access to demo API
+    #[ignore] // Requires network access
+    #[serial]
     async fn test_get_single_market() {
         let test_data = get_test_market_data().await;
         let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
@@ -1221,7 +1223,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires network access to demo API
+    #[ignore] // Requires network access
+    #[serial]
     async fn test_get_multiple_markets() {
         let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
@@ -1248,6 +1251,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore] // Requires network access
+    #[serial]
     async fn test_get_market_orderbook() {
         let test_data = get_test_market_data().await;
         let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
@@ -1269,6 +1273,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore] // Requires network access
+    #[serial]
     async fn test_get_trades() {
         let test_data = get_test_market_data().await;
         let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
@@ -1287,6 +1292,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore] // Requires network access
+    #[serial]
     async fn test_get_market_candlesticks() {
         let test_data = get_test_market_data().await;
         let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
@@ -1317,6 +1323,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore] // Requires network access
+    #[serial]
     async fn test_get_batch_market_candlesticks() {
         let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
@@ -1357,6 +1364,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore] // Requires network access
+    #[serial]
     async fn test_get_event_candlesticks() {
         let test_data = get_test_market_data().await;
         let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
