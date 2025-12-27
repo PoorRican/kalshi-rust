@@ -474,7 +474,7 @@ impl Kalshi {
         Ok(result.markets)
     }
 
-    /// Retrieves aggregated candlestick (OHLC) data across all markets in an event.
+    /// Retrieves candlestick (OHLC) data for all markets in an event.
     ///
     /// # Arguments
     /// * `series_ticker` - The ticker of the series containing the event.
@@ -484,7 +484,7 @@ impl Kalshi {
     /// * `period_interval` - The time interval for each candlestick.
     ///
     /// # Returns
-    /// - `Ok(Vec<Candlestick>)`: Vector of aggregated candlestick data on success.
+    /// - `Ok(EventCandlesticks)`: Candlestick data for each market in the event.
     /// - `Err(KalshiError)`: Error on failure.
     pub async fn get_event_candlesticks(
         &self,
@@ -493,7 +493,7 @@ impl Kalshi {
         start_ts: i64,
         end_ts: i64,
         period_interval: PeriodInterval,
-    ) -> Result<Vec<Candlestick>, KalshiError> {
+    ) -> Result<EventCandlesticks, KalshiError> {
         let url = format!(
             "{}/series/{}/events/{}/candlesticks",
             self.base_url, series_ticker, event_ticker
@@ -511,7 +511,11 @@ impl Kalshi {
 
         let result: EventCandlesticksResponse = self.client.get(url).send().await?.json().await?;
 
-        Ok(result.candlesticks)
+        Ok(EventCandlesticks {
+            market_tickers: result.market_tickers,
+            market_candlesticks: result.market_candlesticks,
+            adjusted_end_ts: result.adjusted_end_ts,
+        })
     }
 }
 
@@ -577,8 +581,10 @@ struct BatchCandlesticksResponse {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct EventCandlesticksResponse {
-    event_ticker: String,
-    candlesticks: Vec<Candlestick>,
+    market_tickers: Vec<String>,
+    market_candlesticks: Vec<Vec<Candlestick>>,
+    #[serde(default)]
+    adjusted_end_ts: Option<i64>,
 }
 
 // PUBLIC STRUCTS
@@ -665,6 +671,17 @@ pub struct MarketCandlesticks {
     pub ticker: String,
     /// Candlestick data for this market
     pub candlesticks: Vec<Candlestick>,
+}
+
+/// Aggregated candlestick data for an event containing multiple markets.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct EventCandlesticks {
+    /// Market tickers in this event
+    pub market_tickers: Vec<String>,
+    /// Candlestick data per market (parallel to market_tickers)
+    pub market_candlesticks: Vec<Vec<Candlestick>>,
+    /// Adjusted end timestamp if data was truncated
+    pub adjusted_end_ts: Option<i64>,
 }
 
 /// A market in the Kalshi exchange.
@@ -1338,11 +1355,47 @@ mod tests {
         }
     }
 
-    // NOTE: test_get_event_candlesticks is skipped because the API response structure
-    // differs from what EventCandlesticksResponse expects. The API returns:
-    // { "adjusted_end_ts": i64, "market_candlesticks": Vec<Vec<Candlestick>>, "market_tickers": Vec<String> }
-    // But the current struct expects: { "event_ticker": String, "candlesticks": Vec<Candlestick> }
-    // This requires a library fix to update the EventCandlesticksResponse struct.
+    #[tokio::test]
+    #[ignore] // Requires network access to demo API
+    async fn test_get_event_candlesticks() {
+        let test_data = get_test_market_data().await;
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let start_ts = now - (30 * 24 * 60 * 60); // 30 days ago
+
+        let result = kalshi
+            .get_event_candlesticks(
+                &test_data.series_ticker,
+                &test_data.event_ticker,
+                start_ts,
+                now,
+                PeriodInterval::OneDay,
+            )
+            .await;
+
+        match result {
+            Ok(event_candlesticks) => {
+                // Verify we have market tickers and corresponding candlestick arrays
+                assert!(
+                    !event_candlesticks.market_tickers.is_empty()
+                        || event_candlesticks.market_candlesticks.is_empty(),
+                    "Market tickers and candlesticks should be consistent"
+                );
+                assert_eq!(
+                    event_candlesticks.market_tickers.len(),
+                    event_candlesticks.market_candlesticks.len(),
+                    "Should have same number of market tickers and candlestick arrays"
+                );
+            }
+            Err(e) => {
+                eprintln!("Event candlesticks request failed: {:?}", e);
+            }
+        }
+    }
 
     #[test]
     fn test_candlestick_deserialization() -> serde_json::Result<()> {
@@ -1427,6 +1480,36 @@ mod tests {
         let response: BatchCandlesticksResponse = serde_json::from_str(json)?;
         assert_eq!(response.markets.len(), 2);
         assert_eq!(response.markets[0].ticker, "MARKET-A");
+        Ok(())
+    }
+
+    #[test]
+    fn test_event_candlesticks_response_deserialization() -> serde_json::Result<()> {
+        let json = r#"{
+            "market_tickers": ["MARKET-A", "MARKET-B"],
+            "market_candlesticks": [
+                [{"end_period_ts": 1704067200, "volume": 100}],
+                [{"end_period_ts": 1704067200, "volume": 200}]
+            ],
+            "adjusted_end_ts": 1704153600
+        }"#;
+        let response: EventCandlesticksResponse = serde_json::from_str(json)?;
+        assert_eq!(response.market_tickers.len(), 2);
+        assert_eq!(response.market_candlesticks.len(), 2);
+        assert_eq!(response.adjusted_end_ts, Some(1704153600));
+        assert_eq!(response.market_candlesticks[0][0].volume, Some(100));
+        Ok(())
+    }
+
+    #[test]
+    fn test_event_candlesticks_response_without_adjusted_end_ts() -> serde_json::Result<()> {
+        let json = r#"{
+            "market_tickers": ["MARKET-A"],
+            "market_candlesticks": [[{"end_period_ts": 1704067200}]]
+        }"#;
+        let response: EventCandlesticksResponse = serde_json::from_str(json)?;
+        assert_eq!(response.market_tickers.len(), 1);
+        assert!(response.adjusted_end_ts.is_none());
         Ok(())
     }
 }
