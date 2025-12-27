@@ -132,20 +132,17 @@ impl Kalshi {
         add_param!(params, "max_close_ts", max_close_ts);
         add_param!(params, "tickers", tickers);
 
-        let markets_url =
-            reqwest::Url::parse_with_params(markets_url, &params).unwrap_or_else(|err| {
-                eprintln!("{:?}", err);
-                panic!("Internal Parse Error, please contact developer!");
-            });
+        let markets_url = reqwest::Url::parse_with_params(markets_url, &params)
+            .map_err(|e| KalshiError::InternalError(e.to_string()))?;
 
-        let result: PublicMarketsResponse = self
-            .client
-            .get(markets_url)
-            .header("Authorization", self.curr_token.clone().unwrap())
-            .send()
-            .await?
-            .json()
-            .await?;
+        let builder = self.client.get(markets_url.clone());
+        let builder = if self.is_authenticated() {
+            self.add_auth_headers(builder, "GET", &markets_url)?
+        } else {
+            builder
+        };
+
+        let result: PublicMarketsResponse = builder.send().await?.json().await?;
 
         Ok((result.cursor, result.markets))
     }
@@ -264,22 +261,19 @@ impl Kalshi {
 
         add_param!(params, "depth", depth);
 
-        let orderbook_url =
-            reqwest::Url::parse_with_params(orderbook_url, &params).unwrap_or_else(|err| {
-                eprintln!("{:?}", err);
-                panic!("Internal Parse Error, please contact developer!");
-            });
+        let orderbook_url = reqwest::Url::parse_with_params(orderbook_url, &params)
+            .map_err(|e| KalshiError::InternalError(e.to_string()))?;
 
-        let result: OrderBookResponse = self
-            .client
-            .get(orderbook_url)
-            .header("Authorization", self.curr_token.clone().unwrap())
-            .send()
-            .await?
-            .json()
-            .await?;
+        let builder = self.client.get(orderbook_url.clone());
+        let builder = if self.is_authenticated() {
+            self.add_auth_headers(builder, "GET", &orderbook_url)?
+        } else {
+            builder
+        };
 
-        return Ok(result.orderbook);
+        let result: OrderBookResponse = builder.send().await?.json().await?;
+
+        Ok(result.orderbook)
     }
 
     /// Asynchronously retrieves the market history for a given market on the Kalshi exchange.
@@ -329,19 +323,16 @@ impl Kalshi {
         add_param!(params, "max_ts", max_ts);
 
         let market_history_url = reqwest::Url::parse_with_params(market_history_url, &params)
-            .unwrap_or_else(|err| {
-                eprintln!("{:?}", err);
-                panic!("Internal Parse Error, please contact developer!");
-            });
+            .map_err(|e| KalshiError::InternalError(e.to_string()))?;
 
-        let result: MarketHistoryResponse = self
-            .client
-            .get(market_history_url)
-            .header("Authorization", self.curr_token.clone().unwrap())
-            .send()
-            .await?
-            .json()
-            .await?;
+        let builder = self.client.get(market_history_url.clone());
+        let builder = if self.is_authenticated() {
+            self.add_auth_headers(builder, "GET", &market_history_url)?
+        } else {
+            builder
+        };
+
+        let result: MarketHistoryResponse = builder.send().await?.json().await?;
 
         Ok((result.cursor, result.history))
     }

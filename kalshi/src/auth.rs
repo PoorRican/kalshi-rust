@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 impl<'a> Kalshi {
     /// Asynchronously logs a user into the Kalshi exchange.
     ///
+    /// **DEPRECATED**: Use `Kalshi::new_with_api_key()` for API key authentication instead.
+    /// This method will be removed in a future version.
+    ///
     /// This method sends a POST request to the Kalshi exchange's login endpoint with the user's credentials.
     /// On successful authentication, it updates the current session's token and member ID.
     ///
@@ -20,6 +23,10 @@ impl<'a> Kalshi {
     /// ```
     /// kalshi_instance.login("johndoe@example.com", "example_password").await?;
     /// ```
+    #[deprecated(
+        since = "0.10.0",
+        note = "Use Kalshi::new_with_api_key() for API key authentication instead"
+    )]
     pub async fn login(&mut self, user: &str, password: &str) -> Result<(), KalshiError> {
         let login_url: &str = &format!("{}/login", self.base_url.to_string());
 
@@ -45,6 +52,9 @@ impl<'a> Kalshi {
 
     /// Asynchronously logs a user out of the Kalshi exchange.
     ///
+    /// **DEPRECATED**: With API key authentication, logout is not needed.
+    /// This method will be removed in a future version.
+    ///
     /// Sends a POST request to the Kalshi exchange's logout endpoint. This method
     /// should be called to properly terminate the session initiated by `login`.
     ///
@@ -56,6 +66,10 @@ impl<'a> Kalshi {
     /// ```
     /// kalshi_instance.logout().await?;
     /// ```
+    #[deprecated(
+        since = "0.10.0",
+        note = "With API key authentication, logout is not needed"
+    )]
     pub async fn logout(&self) -> Result<(), KalshiError> {
         let logout_url: &str = &format!("{}/logout", self.base_url.to_string());
 
