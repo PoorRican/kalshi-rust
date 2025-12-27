@@ -1161,7 +1161,7 @@ mod tests {
         Ok(())
     }
 
-    // Integration Tests (require network access to demo API)
+    // Integration Tests (require network access)
     // Run with: cargo test --package kalshi -- --ignored
 
     /// Helper struct to cache test data across integration tests
@@ -1173,7 +1173,7 @@ mod tests {
 
     /// Fetches a valid open market from the demo API for testing
     async fn get_test_market_data() -> TestMarketData {
-        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
         let (_, markets) = kalshi
             .get_multiple_markets(
                 Some(1),
@@ -1209,7 +1209,7 @@ mod tests {
     #[ignore] // Requires network access to demo API
     async fn test_get_single_market() {
         let test_data = get_test_market_data().await;
-        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
         let result = kalshi.get_single_market(&test_data.ticker).await;
 
@@ -1223,7 +1223,7 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires network access to demo API
     async fn test_get_multiple_markets() {
-        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
         let result = kalshi
             .get_multiple_markets(
@@ -1247,10 +1247,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires network access to demo API
+    #[ignore] // Requires network access
     async fn test_get_market_orderbook() {
         let test_data = get_test_market_data().await;
-        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
         let result = kalshi
             .get_market_orderbook(&test_data.ticker, Some(10))
@@ -1268,10 +1268,10 @@ mod tests {
     // Use get_market_candlesticks for historical price data instead.
 
     #[tokio::test]
-    #[ignore] // Requires network access to demo API
+    #[ignore] // Requires network access
     async fn test_get_trades() {
         let test_data = get_test_market_data().await;
-        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
         let result = kalshi
             .get_trades(None, Some(5), Some(test_data.ticker), None, None)
@@ -1286,10 +1286,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires network access to demo API
+    #[ignore] // Requires network access
     async fn test_get_market_candlesticks() {
         let test_data = get_test_market_data().await;
-        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
         // Use a wide time range to ensure we get some data
         let now = std::time::SystemTime::now()
@@ -1316,9 +1316,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires network access to demo API
+    #[ignore] // Requires network access
     async fn test_get_batch_market_candlesticks() {
-        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
         // Fetch a few tickers for batch request
         let (_, markets) = kalshi
@@ -1356,10 +1356,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires network access to demo API
+    #[ignore] // Requires network access
     async fn test_get_event_candlesticks() {
         let test_data = get_test_market_data().await;
-        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::DemoMode);
+        let kalshi = crate::Kalshi::new(crate::TradingEnvironment::LiveMarketMode);
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
