@@ -11,7 +11,7 @@ async fn main() {
         "KALSHI_DEMO_API_KEY_ID",
         "KALSHI_DEMO_PRIVATE_KEY",
     )
-        .expect("Failed to initialize Kalshi client");
+    .expect("Failed to initialize Kalshi client");
 
     let ticker = "HIGHNY-23NOV13-T51".to_string();
 
@@ -25,7 +25,19 @@ async fn main() {
 
     // Place and cancel an order
     let order = kalshi
-        .create_order(Action::Buy, None, 1, Side::Yes, ticker, OrderType::Limit, None, None, None, None, Some(5))
+        .create_order(
+            Action::Buy,
+            None,
+            1,
+            Side::Yes,
+            ticker,
+            OrderType::Limit,
+            None,
+            None,
+            None,
+            None,
+            Some(5),
+        )
         .await
         .unwrap();
 
