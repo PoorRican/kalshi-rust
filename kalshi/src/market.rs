@@ -890,3 +890,327 @@ pub enum MarketStatus {
     /// The market has been settled, and the outcome is determined.
     Settled,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_market_json() -> &'static str {
+        r#"{
+            "ticker": "TEST-TICKER",
+            "event_ticker": "TEST-EVENT",
+            "market_type": "binary",
+            "title": "Test Market",
+            "subtitle": "Test Subtitle",
+            "yes_sub_title": "Yes",
+            "no_sub_title": "No",
+            "open_time": "2024-01-01T00:00:00Z",
+            "close_time": "2024-12-31T23:59:59Z",
+            "expected_expiration_time": null,
+            "expiration_time": null,
+            "latest_expiration_time": "2024-12-31T23:59:59Z",
+            "settlement_timer_seconds": 3600,
+            "status": "open",
+            "response_price_units": "cents",
+            "notional_value": 100,
+            "tick_size": 1,
+            "yes_bid": 50,
+            "yes_ask": 55,
+            "no_bid": 45,
+            "no_ask": 50,
+            "last_price": 52,
+            "previous_yes_bid": 49,
+            "previous_yes_ask": 54,
+            "previous_price": 51,
+            "volume": 10000,
+            "volume_24h": 500,
+            "liquidity": 5000,
+            "open_interest": 2000,
+            "result": "",
+            "cap_strike": null,
+            "can_close_early": false,
+            "expiration_value": "",
+            "category": "politics",
+            "risk_limit_cents": 100000,
+            "strike_type": null,
+            "floor_strike": null,
+            "rules_primary": "Primary rules text",
+            "rules_secondary": "Secondary rules text",
+            w do i
+            "settlement_value": null,
+            "functional_strike": null
+        }"#
+    }
+
+    #[test]
+    fn test_market_deserialization() -> serde_json::Result<()> {
+        let market: Market = serde_json::from_str(sample_market_json())?;
+        assert_eq!(market.ticker, "TEST-TICKER");
+        assert_eq!(market.event_ticker, "TEST-EVENT");
+        assert_eq!(market.yes_bid, 50);
+        assert_eq!(market.volume, 10000);
+        assert!(matches!(market.result, SettlementResult::Void));
+        Ok(())
+    }
+
+    #[test]
+    fn test_single_market_response_deserialization() -> serde_json::Result<()> {
+        let json = format!(r#"{{"market": {}}}"#, sample_market_json());
+        let response: SingleMarketResponse = serde_json::from_str(&json)?;
+        assert_eq!(response.market.ticker, "TEST-TICKER");
+        Ok(())
+    }
+
+    #[test]
+    fn test_public_markets_response_deserialization() -> serde_json::Result<()> {
+        let json = format!(
+            r#"{{"cursor": "next_page_cursor", "markets": [{}]}}"#,
+            sample_market_json()
+        );
+        let response: PublicMarketsResponse = serde_json::from_str(&json)?;
+        assert_eq!(response.cursor, Some("next_page_cursor".to_string()));
+        assert_eq!(response.markets.len(), 1);
+        assert_eq!(response.markets[0].ticker, "TEST-TICKER");
+        Ok(())
+    }
+
+    #[test]
+    fn test_public_markets_response_null_cursor() -> serde_json::Result<()> {
+        let json = format!(r#"{{"cursor": null, "markets": [{}]}}"#, sample_market_json());
+        let response: PublicMarketsResponse = serde_json::from_str(&json)?;
+        assert!(response.cursor.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_orderbook_deserialization() -> serde_json::Result<()> {
+        let json = r#"{"yes": [[50, 100], [49, 200]], "no": [[50, 150]]}"#;
+        let orderbook: Orderbook = serde_json::from_str(json)?;
+        let yes = orderbook.yes.unwrap();
+        assert_eq!(yes.len(), 2);
+        assert_eq!(yes[0], vec![50, 100]);
+        let no = orderbook.no.unwrap();
+        assert_eq!(no.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_orderbook_empty() -> serde_json::Result<()> {
+        let json = r#"{"yes": null, "no": null}"#;
+        let orderbook: Orderbook = serde_json::from_str(json)?;
+        assert!(orderbook.yes.is_none());
+        assert!(orderbook.no.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_snapshot_deserialization() -> serde_json::Result<()> {
+        let json = r#"{
+            "yes_price": 52,
+            "yes_bid": 50,
+            "yes_ask": 55,
+            "no_bid": 45,
+            "no_ask": 50,
+            "volume": 1000,
+            "open_interest": 500,
+            "ts": 1704067200
+        }"#;
+        let snapshot: Snapshot = serde_json::from_str(json)?;
+        assert_eq!(snapshot.yes_price, 52);
+        assert_eq!(snapshot.ts, 1704067200);
+        Ok(())
+    }
+
+    #[test]
+    fn test_trade_deserialization() -> serde_json::Result<()> {
+        let json = r#"{
+            "trade_id": "trade-123",
+            "taker_side": "yes",
+            "ticker": "TEST-TICKER",
+            "count": 10,
+            "yes_price": 52,
+            "no_price": 48,
+            "created_time": "2024-01-01T12:00:00Z"
+        }"#;
+        let trade: Trade = serde_json::from_str(json)?;
+        assert_eq!(trade.trade_id, "trade-123");
+        assert_eq!(trade.count, 10);
+        Ok(())
+    }
+
+    #[test]
+    fn test_settlement_result_variants() -> serde_json::Result<()> {
+        assert!(matches!(
+            serde_json::from_str::<SettlementResult>(r#""yes""#)?,
+            SettlementResult::Yes
+        ));
+        assert!(matches!(
+            serde_json::from_str::<SettlementResult>(r#""no""#)?,
+            SettlementResult::No
+        ));
+        assert!(matches!(
+            serde_json::from_str::<SettlementResult>(r#""""#)?,
+            SettlementResult::Void
+        ));
+        assert!(matches!(
+            serde_json::from_str::<SettlementResult>(r#""all_no""#)?,
+            SettlementResult::AllNo
+        ));
+        assert!(matches!(
+            serde_json::from_str::<SettlementResult>(r#""all_yes""#)?,
+            SettlementResult::AllYes
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_market_status_variants() -> serde_json::Result<()> {
+        assert!(matches!(
+            serde_json::from_str::<MarketStatus>(r#""open""#)?,
+            MarketStatus::Open
+        ));
+        assert!(matches!(
+            serde_json::from_str::<MarketStatus>(r#""closed""#)?,
+            MarketStatus::Closed
+        ));
+        assert!(matches!(
+            serde_json::from_str::<MarketStatus>(r#""settled""#)?,
+            MarketStatus::Settled
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_orderbook_response_deserialization() -> serde_json::Result<()> {
+        let json = r#"{"orderbook": {"yes": [[50, 100]], "no": [[50, 150]]}}"#;
+        let response: OrderBookResponse = serde_json::from_str(json)?;
+        assert!(response.orderbook.yes.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn test_market_history_response_deserialization() -> serde_json::Result<()> {
+        let json = r#"{
+            "cursor": "next",
+            "ticker": "TEST-TICKER",
+            "history": [{
+                "yes_price": 52,
+                "yes_bid": 50,
+                "yes_ask": 55,
+                "no_bid": 45,
+                "no_ask": 50,
+                "volume": 1000,
+                "open_interest": 500,
+                "ts": 1704067200
+            }]
+        }"#;
+        let response: MarketHistoryResponse = serde_json::from_str(json)?;
+        assert_eq!(response.ticker, "TEST-TICKER");
+        assert_eq!(response.history.len(), 1);
+        Ok(())
+    }
+
+    // HTTP Mock Tests
+    #[tokio::test]
+    async fn test_get_single_market() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/markets/TEST-TICKER")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(r#"{{"market": {}}}"#, sample_market_json()))
+            .create_async()
+            .await;
+
+        let kalshi = crate::Kalshi::new_with_base_url(&server.url());
+        let result = kalshi.get_single_market(&"TEST-TICKER".to_string()).await;
+
+        mock.assert_async().await;
+        let market = result.unwrap();
+        assert_eq!(market.ticker, "TEST-TICKER");
+        assert_eq!(market.yes_bid, 50);
+    }
+
+    #[tokio::test]
+    async fn test_get_multiple_markets() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", mockito::Matcher::Regex(r"^/markets\?.*".to_string()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"cursor": "next_cursor", "markets": [{}]}}"#,
+                sample_market_json()
+            ))
+            .create_async()
+            .await;
+
+        let kalshi = crate::Kalshi::new_with_base_url(&server.url());
+        let result = kalshi
+            .get_multiple_markets(Some(10), None, None, None, None, None, None, None)
+            .await;
+
+        mock.assert_async().await;
+        let (cursor, markets) = result.unwrap();
+        assert_eq!(cursor, Some("next_cursor".to_string()));
+        assert_eq!(markets.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_market_orderbook() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", mockito::Matcher::Regex(r"^/markets/TEST-TICKER/orderbook.*".to_string()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"orderbook": {"yes": [[50, 100], [49, 200]], "no": [[50, 150]]}}"#)
+            .create_async()
+            .await;
+
+        let kalshi = crate::Kalshi::new_with_base_url(&server.url());
+        let result = kalshi
+            .get_market_orderbook(&"TEST-TICKER".to_string(), Some(10))
+            .await;
+
+        mock.assert_async().await;
+        let orderbook = result.unwrap();
+        assert!(orderbook.yes.is_some());
+        assert_eq!(orderbook.yes.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_market_history() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", mockito::Matcher::Regex(r"^/markets/TEST-TICKER/history.*".to_string()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{
+                "cursor": "next",
+                "ticker": "TEST-TICKER",
+                "history": [{
+                    "yes_price": 52,
+                    "yes_bid": 50,
+                    "yes_ask": 55,
+                    "no_bid": 45,
+                    "no_ask": 50,
+                    "volume": 1000,
+                    "open_interest": 500,
+                    "ts": 1704067200
+                }]
+            }"#)
+            .create_async()
+            .await;
+
+        let kalshi = crate::Kalshi::new_with_base_url(&server.url());
+        let result = kalshi
+            .get_market_history(&"TEST-TICKER".to_string(), Some(100), None, None, None)
+            .await;
+
+        mock.assert_async().await;
+        let (cursor, history) = result.unwrap();
+        assert_eq!(cursor, Some("next".to_string()));
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].yes_price, 52);
+    }
+}
