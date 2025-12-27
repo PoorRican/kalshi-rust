@@ -609,21 +609,54 @@ impl fmt::Display for PeriodInterval {
     }
 }
 
+/// OHLC (Open, High, Low, Close) price data.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Ohlc {
+    /// Opening price (in cents)
+    pub open: Option<i64>,
+    /// Highest price during the period
+    pub high: Option<i64>,
+    /// Lowest price during the period
+    pub low: Option<i64>,
+    /// Closing price
+    pub close: Option<i64>,
+}
+
+/// Price OHLC data with previous period reference.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct PriceOhlc {
+    /// Opening price (in cents)
+    pub open: Option<i64>,
+    /// Highest price during the period
+    pub high: Option<i64>,
+    /// Lowest price during the period
+    pub low: Option<i64>,
+    /// Closing price
+    pub close: Option<i64>,
+    /// Previous period's closing price
+    pub previous: Option<i64>,
+}
+
 /// A candlestick (OHLC) data point for market price history.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Candlestick {
-    /// Opening price (in cents for Yes contracts)
-    pub open: i64,
-    /// Highest price during the period
-    pub high: i64,
-    /// Lowest price during the period
-    pub low: i64,
-    /// Closing price
-    pub close: i64,
+    /// End timestamp of the candlestick period (Unix epoch seconds)
+    pub end_period_ts: i64,
+    /// Price OHLC data
+    #[serde(default)]
+    pub price: Option<PriceOhlc>,
+    /// Yes-side bid OHLC
+    #[serde(default)]
+    pub yes_bid: Option<Ohlc>,
+    /// Yes-side ask OHLC
+    #[serde(default)]
+    pub yes_ask: Option<Ohlc>,
     /// Trading volume during the period
-    pub volume: i64,
-    /// Timestamp of the candlestick period start (Unix epoch seconds)
-    pub ts: i64,
+    #[serde(default)]
+    pub volume: Option<i64>,
+    /// Open interest at the end of the period
+    #[serde(default)]
+    pub open_interest: Option<i64>,
 }
 
 /// Candlestick data for a specific market (used in batch responses).
@@ -936,7 +969,6 @@ mod tests {
             "floor_strike": null,
             "rules_primary": "Primary rules text",
             "rules_secondary": "Secondary rules text",
-            w do i
             "settlement_value": null,
             "functional_strike": null
         }"#
@@ -1212,5 +1244,91 @@ mod tests {
         assert_eq!(cursor, Some("next".to_string()));
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].yes_price, 52);
+    }
+
+    #[test]
+    fn test_candlestick_deserialization() -> serde_json::Result<()> {
+        let json = r#"{
+            "end_period_ts": 1704067200,
+            "price": {
+                "open": 50,
+                "high": 55,
+                "low": 48,
+                "close": 52,
+                "previous": 49
+            },
+            "yes_bid": {
+                "open": 49,
+                "high": 54,
+                "low": 47,
+                "close": 51
+            },
+            "yes_ask": {
+                "open": 51,
+                "high": 56,
+                "low": 49,
+                "close": 53
+            },
+            "volume": 1000,
+            "open_interest": 500
+        }"#;
+        let candle: Candlestick = serde_json::from_str(json)?;
+        assert_eq!(candle.end_period_ts, 1704067200);
+        assert_eq!(candle.volume, Some(1000));
+        assert_eq!(candle.open_interest, Some(500));
+        let price = candle.price.unwrap();
+        assert_eq!(price.open, Some(50));
+        assert_eq!(price.close, Some(52));
+        assert_eq!(price.previous, Some(49));
+        let yes_bid = candle.yes_bid.unwrap();
+        assert_eq!(yes_bid.close, Some(51));
+        Ok(())
+    }
+
+    #[test]
+    fn test_candlestick_minimal_deserialization() -> serde_json::Result<()> {
+        let json = r#"{"end_period_ts": 1704067200}"#;
+        let candle: Candlestick = serde_json::from_str(json)?;
+        assert_eq!(candle.end_period_ts, 1704067200);
+        assert!(candle.price.is_none());
+        assert!(candle.yes_bid.is_none());
+        assert!(candle.volume.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_market_candlesticks_deserialization() -> serde_json::Result<()> {
+        let json = r#"{
+            "ticker": "TEST-TICKER",
+            "candlesticks": [
+                {"end_period_ts": 1704067200, "volume": 100},
+                {"end_period_ts": 1704070800, "volume": 200}
+            ]
+        }"#;
+        let market_candles: MarketCandlesticks = serde_json::from_str(json)?;
+        assert_eq!(market_candles.ticker, "TEST-TICKER");
+        assert_eq!(market_candles.candlesticks.len(), 2);
+        assert_eq!(market_candles.candlesticks[0].volume, Some(100));
+        Ok(())
+    }
+
+    #[test]
+    fn test_batch_candlesticks_response_deserialization() -> serde_json::Result<()> {
+        let json = r#"{
+            "markets": [
+                {
+                    "ticker": "MARKET-A",
+                    "candlesticks": [{"end_period_ts": 1704067200}]
+                },
+                {
+                    "ticker": "MARKET-B",
+                    "candlesticks": [{"end_period_ts": 1704070800}]
+                }
+            ]
+        }"#;
+        let response: BatchCandlesticksResponse = serde_json::from_str(json)?;
+        assert_eq!(response.markets.len(), 2);
+        assert_eq!(response.markets[0].ticker, "MARKET-A");
+        Ok(())
     }
 }
