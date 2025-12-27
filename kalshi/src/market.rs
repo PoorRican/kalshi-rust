@@ -1,6 +1,7 @@
 use super::Kalshi;
 use crate::kalshi_error::*;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 impl Kalshi {
     /// Retrieves detailed information about a specific event from the Kalshi exchange.
@@ -391,6 +392,129 @@ impl Kalshi {
 
         Ok((result.cursor, result.trades))
     }
+
+    /// Retrieves candlestick (OHLC) data for a specific market.
+    ///
+    /// # Arguments
+    /// * `series_ticker` - The ticker of the series containing the market.
+    /// * `ticker` - The ticker of the market.
+    /// * `start_ts` - Start timestamp (Unix epoch seconds).
+    /// * `end_ts` - End timestamp (Unix epoch seconds).
+    /// * `period_interval` - The time interval for each candlestick.
+    ///
+    /// # Returns
+    /// - `Ok(Vec<Candlestick>)`: Vector of candlestick data on success.
+    /// - `Err(KalshiError)`: Error on failure.
+    pub async fn get_market_candlesticks(
+        &self,
+        series_ticker: &str,
+        ticker: &str,
+        start_ts: i64,
+        end_ts: i64,
+        period_interval: PeriodInterval,
+    ) -> Result<Vec<Candlestick>, KalshiError> {
+        let url = format!(
+            "{}/series/{}/markets/{}/candlesticks",
+            self.base_url, series_ticker, ticker
+        );
+
+        let mut params: Vec<(&str, String)> = Vec::with_capacity(3);
+        params.push(("start_ts", start_ts.to_string()));
+        params.push(("end_ts", end_ts.to_string()));
+        params.push(("period_interval", period_interval.to_string()));
+
+        let url = reqwest::Url::parse_with_params(&url, &params).unwrap_or_else(|err| {
+            eprintln!("{:?}", err);
+            panic!("Internal Parse Error, please contact developer!");
+        });
+
+        let result: SingleMarketCandlesticksResponse =
+            self.client.get(url).send().await?.json().await?;
+
+        Ok(result.candlesticks)
+    }
+
+    /// Retrieves candlestick (OHLC) data for multiple markets in a single request.
+    ///
+    /// # Arguments
+    /// * `tickers` - Comma-separated list of market tickers (max 100).
+    /// * `start_ts` - Start timestamp (Unix epoch seconds).
+    /// * `end_ts` - End timestamp (Unix epoch seconds).
+    /// * `period_interval` - The time interval for each candlestick.
+    ///
+    /// # Returns
+    /// - `Ok(Vec<MarketCandlesticks>)`: Vector of market candlestick data on success.
+    /// - `Err(KalshiError)`: Error on failure.
+    ///
+    /// # Notes
+    /// - Maximum of 100 tickers per request.
+    /// - Maximum of 10,000 total candlesticks returned.
+    pub async fn get_batch_market_candlesticks(
+        &self,
+        tickers: &str,
+        start_ts: i64,
+        end_ts: i64,
+        period_interval: PeriodInterval,
+    ) -> Result<Vec<MarketCandlesticks>, KalshiError> {
+        let url = format!("{}/markets/candlesticks", self.base_url);
+
+        let mut params: Vec<(&str, String)> = Vec::with_capacity(4);
+        params.push(("tickers", tickers.to_string()));
+        params.push(("start_ts", start_ts.to_string()));
+        params.push(("end_ts", end_ts.to_string()));
+        params.push(("period_interval", period_interval.to_string()));
+
+        let url = reqwest::Url::parse_with_params(&url, &params).unwrap_or_else(|err| {
+            eprintln!("{:?}", err);
+            panic!("Internal Parse Error, please contact developer!");
+        });
+
+        let result: BatchCandlesticksResponse =
+            self.client.get(url).send().await?.json().await?;
+
+        Ok(result.markets)
+    }
+
+    /// Retrieves aggregated candlestick (OHLC) data across all markets in an event.
+    ///
+    /// # Arguments
+    /// * `series_ticker` - The ticker of the series containing the event.
+    /// * `event_ticker` - The ticker of the event.
+    /// * `start_ts` - Start timestamp (Unix epoch seconds).
+    /// * `end_ts` - End timestamp (Unix epoch seconds).
+    /// * `period_interval` - The time interval for each candlestick.
+    ///
+    /// # Returns
+    /// - `Ok(Vec<Candlestick>)`: Vector of aggregated candlestick data on success.
+    /// - `Err(KalshiError)`: Error on failure.
+    pub async fn get_event_candlesticks(
+        &self,
+        series_ticker: &str,
+        event_ticker: &str,
+        start_ts: i64,
+        end_ts: i64,
+        period_interval: PeriodInterval,
+    ) -> Result<Vec<Candlestick>, KalshiError> {
+        let url = format!(
+            "{}/series/{}/events/{}/candlesticks",
+            self.base_url, series_ticker, event_ticker
+        );
+
+        let mut params: Vec<(&str, String)> = Vec::with_capacity(3);
+        params.push(("start_ts", start_ts.to_string()));
+        params.push(("end_ts", end_ts.to_string()));
+        params.push(("period_interval", period_interval.to_string()));
+
+        let url = reqwest::Url::parse_with_params(&url, &params).unwrap_or_else(|err| {
+            eprintln!("{:?}", err);
+            panic!("Internal Parse Error, please contact developer!");
+        });
+
+        let result: EventCandlesticksResponse =
+            self.client.get(url).send().await?.json().await?;
+
+        Ok(result.candlesticks)
+    }
 }
 
 // PRIVATE STRUCTS
@@ -442,7 +566,74 @@ struct PublicTradesResponse {
     trades: Vec<Trade>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct SingleMarketCandlesticksResponse {
+    ticker: String,
+    candlesticks: Vec<Candlestick>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct BatchCandlesticksResponse {
+    markets: Vec<MarketCandlesticks>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct EventCandlesticksResponse {
+    event_ticker: String,
+    candlesticks: Vec<Candlestick>,
+}
+
 // PUBLIC STRUCTS
+
+/// Period interval for candlestick data.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum PeriodInterval {
+    /// 1-minute candles
+    #[serde(rename = "1m")]
+    OneMinute,
+    /// 1-hour candles
+    #[serde(rename = "1h")]
+    OneHour,
+    /// 1-day candles
+    #[serde(rename = "1d")]
+    OneDay,
+}
+
+impl fmt::Display for PeriodInterval {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PeriodInterval::OneMinute => write!(f, "1m"),
+            PeriodInterval::OneHour => write!(f, "1h"),
+            PeriodInterval::OneDay => write!(f, "1d"),
+        }
+    }
+}
+
+/// A candlestick (OHLC) data point for market price history.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Candlestick {
+    /// Opening price (in cents for Yes contracts)
+    pub open: i64,
+    /// Highest price during the period
+    pub high: i64,
+    /// Lowest price during the period
+    pub low: i64,
+    /// Closing price
+    pub close: i64,
+    /// Trading volume during the period
+    pub volume: i64,
+    /// Timestamp of the candlestick period start (Unix epoch seconds)
+    pub ts: i64,
+}
+
+/// Candlestick data for a specific market (used in batch responses).
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MarketCandlesticks {
+    /// Market ticker
+    pub ticker: String,
+    /// Candlestick data for this market
+    pub candlesticks: Vec<Candlestick>,
+}
 
 /// A market in the Kalshi exchange.
 ///
