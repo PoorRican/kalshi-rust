@@ -3,6 +3,75 @@ use crate::kalshi_error::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// Deserializer that handles both String and integer values, converting integers to strings.
+/// Used for Kalshi API fields that may return integer 0 instead of empty string.
+fn string_or_int<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct StringOrIntVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for StringOrIntVisitor {
+        type Value = String;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string or integer")
+        }
+
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(v.to_owned())
+        }
+
+        fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
+            Ok(v.to_string())
+        }
+
+        fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(v.to_string())
+        }
+    }
+
+    deserializer.deserialize_any(StringOrIntVisitor)
+}
+
+/// Deserializer for Option<String> fields that may receive integer values.
+fn option_string_or_int<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct OptionStringOrIntVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for OptionStringOrIntVisitor {
+        type Value = Option<String>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string, integer, or null")
+        }
+
+        fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(Some(v.to_owned()))
+        }
+
+        fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
+            Ok(Some(v.to_string()))
+        }
+
+        fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(Some(v.to_string()))
+        }
+    }
+
+    deserializer.deserialize_any(OptionStringOrIntVisitor)
+}
+
 impl Kalshi {
     /// Retrieves detailed information about a specific event from the Kalshi exchange.
     ///
@@ -756,12 +825,14 @@ pub struct Market {
     /// Indicator if the market can close early.
     pub can_close_early: bool,
     /// Value at expiration.
+    #[serde(deserialize_with = "string_or_int")]
     pub expiration_value: String,
     /// Category of the market.
     pub category: String,
     /// Risk limit in cents.
     pub risk_limit_cents: i64,
     /// Type of strike, if applicable.
+    #[serde(default, deserialize_with = "option_string_or_int")]
     pub strike_type: Option<String>,
     /// Floor strike price, if applicable.
     pub floor_strike: Option<f64>,
@@ -769,9 +840,10 @@ pub struct Market {
     pub rules_primary: String,
     /// Secondary rules for the market.
     pub rules_secondary: String,
-    /// Settlement value for the market.
-    pub settlement_value: Option<String>,
+    /// Settlement value for the market (in cents).
+    pub settlement_value: Option<i64>,
     /// Functional strike information, if applicable.
+    #[serde(default, deserialize_with = "option_string_or_int")]
     pub functional_strike: Option<String>,
 }
 
@@ -1189,9 +1261,7 @@ mod tests {
             .await
             .expect("Failed to fetch markets from API");
 
-        let market = markets
-            .first()
-            .expect("No open markets available");
+        let market = markets.first().expect("No open markets available");
 
         // Get the series ticker from the event
         let event = kalshi
