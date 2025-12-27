@@ -28,11 +28,8 @@ impl<'a> Kalshi {
     pub async fn get_balance(&self) -> Result<i64, KalshiError> {
         self.require_auth()?;
 
-        let balance_url = reqwest::Url::parse(&format!(
-            "{}/portfolio/balance",
-            self.base_url
-        ))
-        .map_err(|e| KalshiError::InternalError(e.to_string()))?;
+        let balance_url = reqwest::Url::parse(&format!("{}/portfolio/balance", self.base_url))
+            .map_err(|e| KalshiError::InternalError(e.to_string()))?;
 
         let builder = self.client.get(balance_url.clone());
         let builder = self.add_auth_headers(builder, "GET", &balance_url)?;
@@ -133,11 +130,9 @@ impl<'a> Kalshi {
     pub async fn get_single_order(&self, order_id: &String) -> Result<Order, KalshiError> {
         self.require_auth()?;
 
-        let user_order_url = reqwest::Url::parse(&format!(
-            "{}/portfolio/orders/{}",
-            self.base_url, order_id
-        ))
-        .map_err(|e| KalshiError::InternalError(e.to_string()))?;
+        let user_order_url =
+            reqwest::Url::parse(&format!("{}/portfolio/orders/{}", self.base_url, order_id))
+                .map_err(|e| KalshiError::InternalError(e.to_string()))?;
 
         let builder = self.client.get(user_order_url.clone());
         let builder = self.add_auth_headers(builder, "GET", &user_order_url)?;
@@ -174,11 +169,9 @@ impl<'a> Kalshi {
     pub async fn cancel_order(&self, order_id: &str) -> Result<(Order, i32), KalshiError> {
         self.require_auth()?;
 
-        let cancel_order_url = reqwest::Url::parse(&format!(
-            "{}/portfolio/orders/{}",
-            self.base_url, order_id
-        ))
-        .map_err(|e| KalshiError::InternalError(e.to_string()))?;
+        let cancel_order_url =
+            reqwest::Url::parse(&format!("{}/portfolio/orders/{}", self.base_url, order_id))
+                .map_err(|e| KalshiError::InternalError(e.to_string()))?;
 
         let builder = self.client.delete(cancel_order_url.clone());
         let builder = self.add_auth_headers(builder, "DELETE", &cancel_order_url)?;
@@ -238,11 +231,9 @@ impl<'a> Kalshi {
             _ => {}
         }
 
-        let decrease_order_url = reqwest::Url::parse(&format!(
-            "{}/portfolio/orders/{}",
-            self.base_url, order_id
-        ))
-        .map_err(|e| KalshiError::InternalError(e.to_string()))?;
+        let decrease_order_url =
+            reqwest::Url::parse(&format!("{}/portfolio/orders/{}", self.base_url, order_id))
+                .map_err(|e| KalshiError::InternalError(e.to_string()))?;
 
         let decrease_payload = DecreaseOrderPayload {
             reduce_by,

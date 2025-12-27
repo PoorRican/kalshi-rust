@@ -32,10 +32,7 @@ impl KalshiCredentials {
     /// The PEM env var can contain either a file path or raw PEM content.
     pub fn from_env(key_id_var: &str, pem_var: &str) -> Result<Self, KalshiError> {
         let key_id = std::env::var(key_id_var).map_err(|_| {
-            KalshiError::UserInputError(format!(
-                "Environment variable '{}' not set",
-                key_id_var
-            ))
+            KalshiError::UserInputError(format!("Environment variable '{}' not set", key_id_var))
         })?;
 
         let pem_value = std::env::var(pem_var).map_err(|_| {
@@ -55,11 +52,7 @@ impl KalshiCredentials {
         let timestamp_ms = current_timestamp_ms();
         let signature = generate_signature(&self.private_key, timestamp_ms, method, path)?;
 
-        Ok((
-            self.key_id.clone(),
-            timestamp_ms.to_string(),
-            signature,
-        ))
+        Ok((self.key_id.clone(), timestamp_ms.to_string(), signature))
     }
 }
 
@@ -81,9 +74,8 @@ fn load_private_key(pem_path_or_content: &str) -> Result<RsaPrivateKey, KalshiEr
         )));
     };
 
-    RsaPrivateKey::from_pkcs8_pem(&pem_content).map_err(|e| {
-        KalshiError::UserInputError(format!("Failed to parse PEM private key: {}", e))
-    })
+    RsaPrivateKey::from_pkcs8_pem(&pem_content)
+        .map_err(|e| KalshiError::UserInputError(format!("Failed to parse PEM private key: {}", e)))
 }
 
 /// Checks if a string looks like PEM content (starts with -----BEGIN).
