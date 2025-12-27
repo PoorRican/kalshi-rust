@@ -378,3 +378,17 @@ pub enum TradingEnvironment {
     /// Use this mode for actual trading activities with real money.
     LiveMarketMode,
 }
+
+#[cfg(test)]
+impl Kalshi {
+    /// Creates a new instance of Kalshi with a custom base URL (for testing).
+    pub fn new_with_base_url(base_url: &str) -> Kalshi {
+        Kalshi {
+            base_url: base_url.to_string(),
+            curr_token: None,
+            member_id: None,
+            credentials: None,
+            client: reqwest::Client::new(),
+        }
+    }
+}
