@@ -788,7 +788,7 @@ pub struct Market {
     /// Countdown in seconds to the settlement.
     pub settlement_timer_seconds: i64,
     /// Current status of the market.
-    pub status: String,
+    pub status: MarketStatus,
     /// Units used for pricing responses.
     pub response_price_units: String,
     /// Notional value of the market.
@@ -1001,17 +1001,60 @@ pub enum SettlementResult {
 ///
 /// This enum is used to represent the current operational state of a market.
 ///
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MarketStatus {
+    /// The market is initialized but not yet open.
+    Initialized,
+
+    /// The market has not yet opened for trading.
+    Unopened,
+
     /// The market is open for trading.
     Open,
+
+    /// The market is active for trading (alias for Open).
+    Active,
 
     /// The market is closed and not currently available for trading.
     Closed,
 
     /// The market has been settled, and the outcome is determined.
     Settled,
+
+    /// The market is inactive.
+    Inactive,
+}
+
+impl std::fmt::Display for MarketStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MarketStatus::Initialized => write!(f, "initialized"),
+            MarketStatus::Unopened => write!(f, "unopened"),
+            MarketStatus::Open => write!(f, "open"),
+            MarketStatus::Active => write!(f, "active"),
+            MarketStatus::Closed => write!(f, "closed"),
+            MarketStatus::Settled => write!(f, "settled"),
+            MarketStatus::Inactive => write!(f, "inactive"),
+        }
+    }
+}
+
+impl std::str::FromStr for MarketStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "initialized" => Ok(MarketStatus::Initialized),
+            "unopened" => Ok(MarketStatus::Unopened),
+            "open" => Ok(MarketStatus::Open),
+            "active" => Ok(MarketStatus::Active),
+            "closed" => Ok(MarketStatus::Closed),
+            "settled" => Ok(MarketStatus::Settled),
+            "inactive" => Ok(MarketStatus::Inactive),
+            other => Err(format!("unknown market status: {}", other)),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1291,7 +1334,6 @@ mod tests {
         assert!(!market.ticker.is_empty());
         assert!(!market.event_ticker.is_empty());
         assert!(!market.title.is_empty());
-        assert!(!market.status.is_empty());
     }
 
     #[tokio::test]
