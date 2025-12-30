@@ -1006,36 +1006,33 @@ pub enum SettlementResult {
 pub enum MarketStatus {
     /// The market is initialized but not yet open.
     Initialized,
-
-    /// The market has not yet opened for trading.
-    Unopened,
-
-    /// The market is open for trading.
-    Open,
-
-    /// The market is active for trading (alias for Open).
-    Active,
-
-    /// The market is closed and not currently available for trading.
-    Closed,
-
-    /// The market has been settled, and the outcome is determined.
-    Settled,
-
     /// The market is inactive.
     Inactive,
+    /// The market is active for trading.
+    Active,
+    /// The market is closed and not currently available for trading.
+    Closed,
+    /// The market outcome has been determined.
+    Determined,
+    /// The market is under dispute.
+    Disputed,
+    /// The market has been amended.
+    Amended,
+    /// The market has been finalized.
+    Finalized,
 }
 
 impl std::fmt::Display for MarketStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MarketStatus::Initialized => write!(f, "initialized"),
-            MarketStatus::Unopened => write!(f, "unopened"),
-            MarketStatus::Open => write!(f, "open"),
+            MarketStatus::Inactive => write!(f, "inactive"),
             MarketStatus::Active => write!(f, "active"),
             MarketStatus::Closed => write!(f, "closed"),
-            MarketStatus::Settled => write!(f, "settled"),
-            MarketStatus::Inactive => write!(f, "inactive"),
+            MarketStatus::Determined => write!(f, "determined"),
+            MarketStatus::Disputed => write!(f, "disputed"),
+            MarketStatus::Amended => write!(f, "amended"),
+            MarketStatus::Finalized => write!(f, "finalized"),
         }
     }
 }
@@ -1046,12 +1043,13 @@ impl std::str::FromStr for MarketStatus {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "initialized" => Ok(MarketStatus::Initialized),
-            "unopened" => Ok(MarketStatus::Unopened),
-            "open" => Ok(MarketStatus::Open),
+            "inactive" => Ok(MarketStatus::Inactive),
             "active" => Ok(MarketStatus::Active),
             "closed" => Ok(MarketStatus::Closed),
-            "settled" => Ok(MarketStatus::Settled),
-            "inactive" => Ok(MarketStatus::Inactive),
+            "determined" => Ok(MarketStatus::Determined),
+            "disputed" => Ok(MarketStatus::Disputed),
+            "amended" => Ok(MarketStatus::Amended),
+            "finalized" => Ok(MarketStatus::Finalized),
             other => Err(format!("unknown market status: {}", other)),
         }
     }
@@ -1077,7 +1075,7 @@ mod tests {
             "expiration_time": null,
             "latest_expiration_time": "2024-12-31T23:59:59Z",
             "settlement_timer_seconds": 3600,
-            "status": "open",
+            "status": "active",
             "response_price_units": "cents",
             "notional_value": 100,
             "tick_size": 1,
@@ -1235,16 +1233,36 @@ mod tests {
     #[test]
     fn test_market_status_variants() -> serde_json::Result<()> {
         assert!(matches!(
-            serde_json::from_str::<MarketStatus>(r#""open""#)?,
-            MarketStatus::Open
+            serde_json::from_str::<MarketStatus>(r#""initialized""#)?,
+            MarketStatus::Initialized
+        ));
+        assert!(matches!(
+            serde_json::from_str::<MarketStatus>(r#""inactive""#)?,
+            MarketStatus::Inactive
+        ));
+        assert!(matches!(
+            serde_json::from_str::<MarketStatus>(r#""active""#)?,
+            MarketStatus::Active
         ));
         assert!(matches!(
             serde_json::from_str::<MarketStatus>(r#""closed""#)?,
             MarketStatus::Closed
         ));
         assert!(matches!(
-            serde_json::from_str::<MarketStatus>(r#""settled""#)?,
-            MarketStatus::Settled
+            serde_json::from_str::<MarketStatus>(r#""determined""#)?,
+            MarketStatus::Determined
+        ));
+        assert!(matches!(
+            serde_json::from_str::<MarketStatus>(r#""disputed""#)?,
+            MarketStatus::Disputed
+        ));
+        assert!(matches!(
+            serde_json::from_str::<MarketStatus>(r#""amended""#)?,
+            MarketStatus::Amended
+        ));
+        assert!(matches!(
+            serde_json::from_str::<MarketStatus>(r#""finalized""#)?,
+            MarketStatus::Finalized
         ));
         Ok(())
     }
