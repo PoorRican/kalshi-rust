@@ -593,6 +593,7 @@ impl Kalshi {
 #[derive(Debug, Deserialize, Serialize)]
 struct SingleEventResponse {
     event: Event,
+    #[serde(default)]
     markets: Option<Vec<Market>>,
 }
 
@@ -867,6 +868,7 @@ pub struct Event {
     /// Category of the event.
     pub category: String,
     /// Optional list of markets associated with this event.
+    #[serde(default)]
     pub markets: Option<Vec<Market>>,
     /// Optional date of the event's occurrence.
     pub strike_date: Option<String>,
