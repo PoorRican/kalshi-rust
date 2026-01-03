@@ -660,17 +660,45 @@ struct EventCandlesticksResponse {
 // PUBLIC STRUCTS
 
 /// Period interval for candlestick data.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum PeriodInterval {
     /// 1-minute candles
-    #[serde(rename = "1m")]
     OneMinute,
     /// 1-hour candles
-    #[serde(rename = "1h")]
     OneHour,
     /// 1-day candles
-    #[serde(rename = "1d")]
     OneDay,
+}
+
+impl Serialize for PeriodInterval {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_i32(match self {
+            PeriodInterval::OneMinute => 1,
+            PeriodInterval::OneHour => 60,
+            PeriodInterval::OneDay => 1440,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for PeriodInterval {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = i32::deserialize(deserializer)?;
+        match value {
+            1 => Ok(PeriodInterval::OneMinute),
+            60 => Ok(PeriodInterval::OneHour),
+            1440 => Ok(PeriodInterval::OneDay),
+            _ => Err(serde::de::Error::custom(format!(
+                "invalid period interval: {}",
+                value
+            ))),
+        }
+    }
 }
 
 impl fmt::Display for PeriodInterval {
