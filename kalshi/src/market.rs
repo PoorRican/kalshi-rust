@@ -525,6 +525,27 @@ impl Kalshi {
         end_ts: i64,
         period_interval: PeriodInterval,
     ) -> Result<Vec<MarketCandlesticks>, KalshiError> {
+        // Client-side validation: check if request would exceed 10,000 candlestick limit
+        const MAX_CANDLESTICKS: usize = 10_000;
+        let num_tickers = tickers.split(',').count();
+        let time_range_secs = (end_ts - start_ts).max(0) as usize;
+        let interval_secs: usize = match period_interval {
+            PeriodInterval::OneMinute => 60,
+            PeriodInterval::OneHour => 3600,
+            PeriodInterval::OneDay => 86400,
+        };
+        let num_intervals = time_range_secs / interval_secs;
+        let theoretical_max = num_intervals * num_tickers;
+
+        if theoretical_max > MAX_CANDLESTICKS {
+            return Err(KalshiError::UserInputError(format!(
+                "Request would exceed maximum candlesticks limit ({} max). \
+                 Estimated: {} candlesticks ({} tickers x {} intervals). \
+                 Reduce tickers or time range.",
+                MAX_CANDLESTICKS, theoretical_max, num_tickers, num_intervals
+            )));
+        }
+
         let url = format!("{}/markets/candlesticks", self.base_url);
 
         let mut params: Vec<(&str, String)> = Vec::with_capacity(4);
@@ -538,9 +559,19 @@ impl Kalshi {
             panic!("Internal Parse Error, please contact developer!");
         });
 
-        let result: BatchCandlesticksResponse = self.client.get(url).send().await?.json().await?;
+        let result: BatchCandlesticksApiResponse =
+            self.client.get(url).send().await?.json().await?;
 
-        Ok(result.markets)
+        match result {
+            BatchCandlesticksApiResponse::Success(response) => Ok(response.markets),
+            BatchCandlesticksApiResponse::Error(err) => {
+                let message = match err.error.details {
+                    Some(details) => format!("{}: {}", err.error.message, details),
+                    None => err.error.message,
+                };
+                Err(KalshiError::UserInputError(message))
+            }
+        }
     }
 
     /// Retrieves candlestick (OHLC) data for all markets in an event.
@@ -647,6 +678,26 @@ struct SingleMarketCandlesticksResponse {
 #[derive(Debug, Deserialize, Serialize)]
 struct BatchCandlesticksResponse {
     markets: Vec<MarketCandlesticks>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiErrorDetails {
+    code: String,
+    message: String,
+    #[serde(default)]
+    details: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiErrorResponse {
+    error: ApiErrorDetails,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum BatchCandlesticksApiResponse {
+    Success(BatchCandlesticksResponse),
+    Error(ApiErrorResponse),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -787,7 +838,7 @@ pub struct EventCandlesticks {
 /// Contains detailed information about the market including its ticker,
 /// type, status, and other relevant data.
 ///
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Market {
     /// Unique identifier for the market.
     pub ticker: String,
@@ -1007,7 +1058,7 @@ pub struct Trade {
 /// This enum represents the different results that can be assigned to a market
 /// upon its conclusion.
 ///
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SettlementResult {
     /// The outcome of the market is affirmative.
@@ -1679,5 +1730,59 @@ mod tests {
         assert_eq!(response.market_tickers.len(), 1);
         assert!(response.adjusted_end_ts.is_none());
         Ok(())
+    }
+
+    #[test]
+    fn test_batch_candlesticks_error_response_deserialization() -> serde_json::Result<()> {
+        let json = r#"{"error":{"code":"bad_request","message":"bad request","details":"requested candlesticks across all markets: 12960, max candlesticks: 10000"}}"#;
+        let response: BatchCandlesticksApiResponse = serde_json::from_str(json)?;
+        assert!(matches!(response, BatchCandlesticksApiResponse::Error(_)));
+        if let BatchCandlesticksApiResponse::Error(err) = response {
+            assert_eq!(err.error.code, "bad_request");
+            assert_eq!(err.error.message, "bad request");
+            assert!(err.error.details.is_some());
+            assert!(err.error.details.unwrap().contains("max candlesticks: 10000"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_batch_candlesticks_invalid_params_error() -> serde_json::Result<()> {
+        let json = r#"{"error":{"code":"invalid_parameters","message":"invalid parameters"}}"#;
+        let response: BatchCandlesticksApiResponse = serde_json::from_str(json)?;
+        assert!(matches!(response, BatchCandlesticksApiResponse::Error(_)));
+        if let BatchCandlesticksApiResponse::Error(err) = response {
+            assert_eq!(err.error.code, "invalid_parameters");
+            assert!(err.error.details.is_none());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_batch_candlesticks_success_response_deserialization() -> serde_json::Result<()> {
+        let json = r#"{"markets":[{"ticker":"TEST-TICKER","candlesticks":[{"end_period_ts":1704067200}]}]}"#;
+        let response: BatchCandlesticksApiResponse = serde_json::from_str(json)?;
+        assert!(matches!(response, BatchCandlesticksApiResponse::Success(_)));
+        if let BatchCandlesticksApiResponse::Success(resp) = response {
+            assert_eq!(resp.markets.len(), 1);
+            assert_eq!(resp.markets[0].ticker, "TEST-TICKER");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_candlesticks_limit_calculation() {
+        // 100 tickers, 24h of 1-minute data = 100 * 1440 = 144,000 (exceeds 10,000)
+        let num_tickers = 100;
+        let time_range_secs: usize = 24 * 60 * 60; // 24 hours
+        let interval_secs: usize = 60; // 1 minute
+        let theoretical_max = (time_range_secs / interval_secs) * num_tickers;
+        assert!(theoretical_max > 10_000);
+
+        // 10 tickers, 1h of 1-minute data = 10 * 60 = 600 (within limit)
+        let num_tickers = 10;
+        let time_range_secs: usize = 60 * 60; // 1 hour
+        let theoretical_max = (time_range_secs / interval_secs) * num_tickers;
+        assert!(theoretical_max <= 10_000);
     }
 }
