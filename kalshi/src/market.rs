@@ -845,71 +845,100 @@ pub struct Market {
     /// Ticker of the associated event.
     pub event_ticker: String,
     /// Type of the market.
+    #[serde(default)]
     pub market_type: String,
     /// Title of the market.
+    #[serde(default)]
     pub title: String,
     /// Subtitle of the market.
+    #[serde(default)]
     pub subtitle: String,
     /// Subtitle for the 'Yes' option in the market.
+    #[serde(default)]
     pub yes_sub_title: String,
     /// Subtitle for the 'No' option in the market.
+    #[serde(default)]
     pub no_sub_title: String,
     /// Opening time of the market.
+    #[serde(default)]
     pub open_time: String,
     /// Closing time of the market.
+    #[serde(default)]
     pub close_time: String,
     /// Expected expiration time of the market.
     pub expected_expiration_time: Option<String>,
     /// Actual expiration time of the market.
     pub expiration_time: Option<String>,
     /// Latest possible expiration time of the market.
+    #[serde(default)]
     pub latest_expiration_time: String,
     /// Countdown in seconds to the settlement.
+    #[serde(default)]
     pub settlement_timer_seconds: i64,
     /// Current status of the market.
+    #[serde(default)]
     pub status: MarketStatus,
     /// Units used for pricing responses.
+    #[serde(default)]
     pub response_price_units: String,
     /// Notional value of the market.
+    #[serde(default)]
     pub notional_value: i64,
     /// Minimum price movement in the market.
+    #[serde(default)]
     pub tick_size: i64,
     /// Current bid price for the 'Yes' option.
+    #[serde(default)]
     pub yes_bid: i64,
     /// Current ask price for the 'Yes' option.
+    #[serde(default)]
     pub yes_ask: i64,
     /// Current bid price for the 'No' option.
+    #[serde(default)]
     pub no_bid: i64,
     /// Current ask price for the 'No' option.
+    #[serde(default)]
     pub no_ask: i64,
     /// Last traded price in the market.
+    #[serde(default)]
     pub last_price: i64,
     /// Previous bid price for the 'Yes' option.
+    #[serde(default)]
     pub previous_yes_bid: i64,
     /// Previous ask price for the 'Yes' option.
+    #[serde(default)]
     pub previous_yes_ask: i64,
     /// Previous traded price in the market.
+    #[serde(default)]
     pub previous_price: i64,
     /// Total trading volume in the market.
+    #[serde(default)]
     pub volume: i64,
     /// Trading volume in the last 24 hours.
+    #[serde(default)]
     pub volume_24h: i64,
     /// Liquidity available in the market.
+    #[serde(default)]
     pub liquidity: i64,
     /// Open interest in the market.
+    #[serde(default)]
     pub open_interest: i64,
     /// Result of the market settlement.
+    #[serde(default)]
     pub result: SettlementResult,
     /// Cap strike price, if applicable.
     pub cap_strike: Option<f64>,
     /// Indicator if the market can close early.
+    #[serde(default)]
     pub can_close_early: bool,
     /// Value at expiration.
-    #[serde(deserialize_with = "string_or_int")]
+    #[serde(default, deserialize_with = "string_or_int")]
     pub expiration_value: String,
     /// Category of the market.
+    #[serde(default)]
     pub category: String,
     /// Risk limit in cents.
+    #[serde(default)]
     pub risk_limit_cents: i64,
     /// Type of strike, if applicable.
     #[serde(default, deserialize_with = "option_string_or_int")]
@@ -917,8 +946,10 @@ pub struct Market {
     /// Floor strike price, if applicable.
     pub floor_strike: Option<f64>,
     /// Primary rules for the market.
+    #[serde(default)]
     pub rules_primary: String,
     /// Secondary rules for the market.
+    #[serde(default)]
     pub rules_secondary: String,
     /// Settlement value for the market (in cents).
     pub settlement_value: Option<i64>,
@@ -1058,7 +1089,7 @@ pub struct Trade {
 /// This enum represents the different results that can be assigned to a market
 /// upon its conclusion.
 ///
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SettlementResult {
     /// The outcome of the market is affirmative.
@@ -1066,6 +1097,7 @@ pub enum SettlementResult {
     /// The outcome of the market is negative.
     No,
     /// The market is voided, usually due to specific conditions not being met.
+    #[default]
     #[serde(rename = "")]
     Void,
     /// All options in the market are settled as 'No'.
@@ -1080,7 +1112,7 @@ pub enum SettlementResult {
 ///
 /// This enum is used to represent the current operational state of a market.
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MarketStatus {
     /// The market is initialized but not yet open.
@@ -1090,6 +1122,7 @@ pub enum MarketStatus {
     /// The market is active for trading.
     Active,
     /// The market is closed and not currently available for trading.
+    #[default]
     Closed,
     /// The market outcome has been determined.
     Determined,
@@ -1741,7 +1774,11 @@ mod tests {
             assert_eq!(err.error.code, "bad_request");
             assert_eq!(err.error.message, "bad request");
             assert!(err.error.details.is_some());
-            assert!(err.error.details.unwrap().contains("max candlesticks: 10000"));
+            assert!(err
+                .error
+                .details
+                .unwrap()
+                .contains("max candlesticks: 10000"));
         }
         Ok(())
     }
